@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">    <title>Barcode Generator</title>
+    <!-- Ubuntu Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    
+    <!-- Theme-Farbe & PWA-Status für Smartphones -->
+    <meta name="theme-color" content="#f0fdfa">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="App-Name">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    
+    <!-- PWA Manifest & Icons -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Icons für Android & Desktop-Browser -->
+    <link rel="icon" type="image/png" href="android-chrome-192x192.png" sizes="192x192">
+    <link rel="icon" type="image/png" href="android-chrome-512x512.png" sizes="512x512">
+    
+    <!-- Icon für iOS / Apple -->
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <style>
+        /* ==========================================
+           ZENTRALE FARBPALETTE (DESIGN TOKENS)
+           ========================================== */
+        :root {
+            --teal-bg: #f0fdfa;         /* Sehr sanfter Hintergrund (Mint) */
+            --teal-card: #ffffff;       /* Karten-Hintergrund */
+            --teal-text: #134e4a;       /* Haupttext (Dunkles Türkis) */
+            --teal-heading: #115e59;    /* Überschriften */
+            --teal-primary: #0d9488;    /* Sattes Türkis (Buttons, aktive Elemente) */
+            --teal-primary-hover: #115e59; /* Sattes Türkis Hover */
+            --teal-light: #ccfbf1;      /* Heller Akzentton */
+            --teal-border: #99f6e4;     /* Rahmen und Linien */
+            --teal-input-border: #5eead4; /* Input-Rahmen */
+            --teal-hint: #0f766e;       /* Hinweise & Labels */
+        }
+        /* Base Reset & Typography */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: "Ubuntu", sans-serif;
+            background-color: var(--teal-bg);
+            color: var(--teal-text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* Fixed Top Navigation Bar */
+        .top-navbar {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--teal-card);
+            padding: 8px 16px;
+            border-radius: 30px;
+            box-shadow: 0 4px 20px rgba(13, 148, 136, 0.1);
+            display: flex;
+            gap: 15px;
+            z-index: 1000;
+            border: 1px solid var(--teal-light);
+        }
+
+        .nav-icon-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            color: var(--teal-primary);
+            text-decoration: none;
+            background-color: var(--teal-bg);
+            transition: all 0.4s ease;
+        }
+
+        .nav-icon-link svg {
+            width: 24px;
+            height: 24px;
+            fill: currentColor;
+            transition: transform 0.3s ease;
+        }
+
+        .nav-icon-link:hover {
+background-color: var(--teal-light);
+            color: var(--teal-primary-hover);
+        }
+
+        .nav-icon-link:hover svg {
+            transform: scale(1.1);
+        }
+
+        /* Active State for Links */
+        .nav-icon-link.active {
+            background-color: var(--teal-primary);
+            color: #ffffff;
+box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3);        }
+
+        /* Main Card Container mit dynamischer Breiten-Anpassung */
+        .card {
+background-color: var(--teal-card);
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(13, 148, 136, 0.08);
+            padding: 30px;
+            width: 90%;
+            max-width: 390px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: max-width 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            border: 1px solid var(--teal-border);
+        }
+
+        /* Wenn der Barcode-Tab aktiv ist, wird die Karte automatisch etwas breiter (für BIN ID & SN) */
+        .card:has(#barcode-section.active) {
+            max-width: 460px;
+        }
+
+        h1 {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--teal-heading);
+        }
+
+        hr {
+            border: none;
+            border-top: 1px solid var(--teal-border);
+            margin: 15px 0 25px 0;
+        }
+
+        /* Tab Content Display Logic */
+        .tab-content {
+            display: none;
+            opacity: 0;
+            transform: translateY(15px);
+            transition: opacity 1s ease, transform 1s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Animated Content Elements */
+        .tab-content.active .code-wrapper,
+        .tab-content.active .qrcode,
+        .tab-content.active .barcode-container {
+            animation: slowPop 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .tab-content.active input[type="text"] {
+            animation: slowSlide 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.2s backwards;
+        }
+
+        .tab-content.active .hint {
+            animation: slowFade 1s ease 0.4s backwards;
+        }
+
+        /* Keyframes for slow, smooth entrance */
+        @keyframes slowPop {
+            0% {
+                opacity: 0;
+                transform: scale(0.9) translateY(10px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        @keyframes slowSlide {
+            0% {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slowFade {
+            0% {
+                opacity: 0;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+/* Barcode Blocks & Spacing */
+        .barcode-block {
+            background-color: var(--teal-bg);
+            border: 1px solid var(--teal-border);
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        /* Spezieller Abstand unter dem ersten Block (BIN ID) statt einer Linie */
+        .barcode-block.bin-block {
+            margin-bottom: 20px;
+        }
+
+                /* Falls der letzte Block keinen unnötigen Außenabstand nach unten braucht */
+        .barcode-block:last-child {
+            margin-bottom: 0px;
+        }
+
+        /* Form Controls & Containers */
+        .code-wrapper,
+        .bin-wrapper,
+        .sn-wrapper {
+            margin: 10px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            overflow: hidden;
+            background-color: #ffffff;
+            padding: 12px 25px;
+            border-radius: 6px;
+        }
+
+  .sn-wrapper {
+    padding: 0 5px;
+}
+
+        /* Spezifischer QR-Code Container */
+        #qr-section .qrcode {
+            margin: 15px auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 230px;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+   #qr-section .qrcode img,
+        #qr-section .qrcode canvas {
+            display: block;
+            box-shadow: none !important; /* Schatten für harten Kontrast entfernt */
+            filter: none !important;
+        }
+
+        /* Barcode spezifische Container & SVGs */
+        #barcode-section .barcode-container {
+            margin: 8px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            overflow: hidden;
+        }
+
+/* 1. Gemeinsame Basis für alle Barcode-SVGs */
+        #barcode-section svg,
+        .bin-wrapper svg,
+        .sn-wrapper svg {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            background-color: #ffffff;
+        }
+
+        /* 2. Spezielle Mindesthöhe nur für den SN-Barcode, damit er nicht zu flach wird */
+        .sn-wrapper svg {
+            min-height: 85px;
+        }
+
+        .field-label {
+            display: block;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--teal-hint);
+            margin-top: 4px;
+            margin-bottom: 6px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 15px;
+            border: 1.5px solid var(--teal-card);
+            border-radius: 8px;
+            outline: none;
+            color: var(--teal-text);
+            transition: border-color 0.3s ease;
+            background-color: #ffffff;
+        }
+
+input[type="text"]:focus {
+            border-color: var(--teal-primary);
+            box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+        }
+
+        .hint {
+            font-size: 12px;
+            color: var(--teal-hint);
+            margin-top: 15px;
+            text-align: left;
+            line-height: 1.4;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Fixed Navbar with Icon Links & Anchor Hrefs -->
+    <nav class="top-navbar">
+        <a href="#qr" id="link-qr" class="nav-icon-link active" title="QR Code Generator">
+            <!-- QR Icon SVG -->
+            <svg viewBox="0 0 24 24">
+                <path
+                    d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm13-2h3v2h-3v-2zm-3 0h2v3h-2v-3zm3 3h3v5h-2v-3h-1v-2zm-3 2h2v3h-2v-3zm0-2h2v2h-2v-2z" />
+            </svg>
+        </a>
+        <a href="#barcode" id="link-barcode" class="nav-icon-link" title="Code 39 Generator">
+            <!-- Barcode Icon SVG -->
+            <svg viewBox="0 0 24 24">
+                <path d="M2 4h2v16H2V4zm3 0h1v16H5V4zm3 0h3v16H8V4zm4 0h1v16h-1V4zm3 0h2v16h-2V4zm3 0h3v16h-3V4z" />
+            </svg>
+        </a>
+    </nav>
+
+    <!-- Main Generator Card -->
+    <div class="card">
+        <h1 id="card-title">QR Code Generator</h1>
+        <hr />
+
+        <!-- Section 1: QR Code -->
+        <div id="qr-section" class="tab-content active">
+            <div class="code-wrapper">
+                <div class="qrcode"></div>
+            </div>
+            <input type="text" id="qr-input" placeholder="Text oder URL eingeben..." oninput="generateQr()" />
+        </div>
+
+        <!-- Section 2: Code 39 Barcode (Komplett umschlossen und sauber getrennt) -->
+        <div id="barcode-section" class="tab-content">
+
+            <!-- 1. BIN ID Block -->
+            <div class="barcode-block bin-block">
+                <label for="bin-input" class="field-label">BIN ID</label>
+                <div class="code-wrapper bin-wrapper">
+                    <svg id="barcode-bin"></svg>
+                </div>
+                <input type="text" id="bin-input" placeholder="BIN ID eingeben..." maxlength="7"
+                    oninput="generateBarcode()" />
+            </div>
+
+            <!-- 2. Seriennummer (SN) Block -->
+            <div class="barcode-block sn-block">
+                <label for="sn-input" class="field-label">Seriennummer (SN)</label>
+                <div class="code-wrapper sn-wrapper">
+                    <svg id="barcode-sn"></svg>
+                </div>
+                <input type="text" id="sn-input" placeholder="Seriennummer (SN) eingeben..." maxlength="25"
+                    oninput="generateBarcode()" />
+            </div>
+
+            <p class="hint">Hinweis: Code 39 unterstützt Großbuchstaben (A–Z), Zahlen (0–9) und einige Sonderzeichen (-
+                . $ / + % und Leerzeichen).</p>
+        </div>
+    </div>
+    <script>
+        // 1. QR-Code Instanz einmalig mit fixer Größe (220x220) erstellen
+        let qrcode = new QRCode(document.querySelector(".qrcode"), {
+            text: "Why did you scan me?",
+            width: 220,
+            height: 220,
+            colorDark: "#000000",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.H
+        });
+
+        window.onload = function () {
+            // Beide neuen Barcodes beim Laden initialisieren
+            generateBarcodeWithText("#barcode-bin", "D010101");
+            generateBarcodeWithText("#barcode-sn", "0123456789");
+
+            // Handle URL Hash navigation
+            window.addEventListener("hashchange", handleRoute);
+            handleRoute();
+        };
+
+        // Router function based on # anchor
+        function handleRoute() {
+            const hash = window.location.hash || "#qr";
+
+            const qrSection = document.getElementById("qr-section");
+            const barcodeSection = document.getElementById("barcode-section");
+            const linkQr = document.getElementById("link-qr");
+            const linkBarcode = document.getElementById("link-barcode");
+            const title = document.getElementById("card-title");
+
+            if (hash === "#barcode") {
+                qrSection.classList.remove("active");
+                barcodeSection.classList.add("active");
+
+                linkQr.classList.remove("active");
+                linkBarcode.classList.add("active");
+
+                title.innerText = "Code 39 Generator";
+            } else {
+                barcodeSection.classList.remove("active");
+                qrSection.classList.add("active");
+
+                linkBarcode.classList.remove("active");
+                linkQr.classList.add("active");
+
+                title.innerText = "QR Code Generator";
+            }
+        }
+
+// flüssigeres Verhalten beim Tippen/Löschen:
+function generateQr() {
+    const inputVal = document.getElementById("qr-input").value.trim();
+    if (inputVal === "") {
+        qrcode.clear();
+    } else {
+        qrcode.clear();
+        qrcode.makeCode(inputVal);
+    }
+}
+
+function generateBarcodeWithText(selector, text, barWidth = 2, barHeight = 60) {
+    if (!text) return;
+    try {
+        JsBarcode(selector, text, {
+            format: "CODE128",
+            lineColor: "#000000",     /* Reines Schwarz */
+            background: "#ffffff",    /* Reines Weiß */
+            width: barWidth,
+            height: barHeight,
+            displayValue: true,
+            fontSize: 14,
+            marginTop: 5,
+            marginBottom: 5,
+            marginLeft: 20,          /* Mindestens das 10-fache der Strichbreite */
+            marginRight: 20          /* Quiet Zone links & rechts */
+        });
+    } catch (e) {
+        // Falls ein Zeichen eingegeben wird, das Code 39 absolut nicht unterstützt (z.B. Umlaute)
+        console.warn("Unzulässiges Zeichen für Code 39 in " + selector);
+    }
+}
+
+
+function generateBarcode() {
+    const binInput = document.getElementById("bin-input");
+    const snInput = document.getElementById("sn-input");
+
+    let binVal = binInput.value.trim().toUpperCase();
+    let snVal = snInput.value.trim().toUpperCase();
+
+    // Wichtig: Das '&'-Zeichen bricht HTML/SVG ab. Wir ersetzen oder filtern es hier ab,
+    // damit es nicht zum Absturz führt. Erlaubte Code-39-Zeichen wie % bleiben erhalten.
+    binVal = binVal.replace(/&/g, "");
+    snVal = snVal.replace(/&/g, "");
+
+    // Automatische Großschreibung für die Felder zurückschreiben
+    if (binInput.value !== binVal) binInput.value = binVal;
+    if (snInput.value !== snVal) snInput.value = snVal;
+
+    // Strikte Längenbegrenzung
+    if (binVal.length > 7) {
+        binVal = binVal.substring(0, 7);
+        binInput.value = binVal;
+    }
+    if (snVal.length > 25) {
+        snVal = snVal.substring(0, 25);
+        snInput.value = snVal;
+    }
+
+    // BIN ID Barcode generieren
+    if (binVal !== "") {
+        generateBarcodeWithText("#barcode-bin", binVal, 2, 60);
+    } else {
+        document.getElementById("barcode-bin").innerHTML = "";
+    }
+
+    // SN Barcode generieren
+    if (snVal !== "") {
+        generateBarcodeWithText("#barcode-sn", snVal, 1.5, 80);
+    } else {
+        document.getElementById("barcode-sn").innerHTML = "";
+    }
+}
+    
+</script>
+</body>
+
+</html>
